@@ -10,3 +10,5 @@ public_libs
 results
 .settings
 .vscode
+dist/
+.wrangler/
