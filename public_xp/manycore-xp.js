@@ -1,4 +1,4 @@
-var xpapp = angular.module('manycoreXP', ['ngSanitize', 'ui.router', 'ui.bootstrap', 'ui.select']); // , 'gist', 'mcq', 'ngAnimate'
+var xpapp = angular.module('manycoreXP', ['ngSanitize', 'ui.router', 'ui.bootstrap', 'ui.select', 'manycoreStatic']); // , 'gist', 'mcq', 'ngAnimate'
 
 /************************************************/
 /* UI States									*/
