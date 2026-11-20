@@ -6,7 +6,7 @@ dashboard down to detailed timelines of threads, cores, locks and caches.
 
 **Live demo: <https://manycore.baxyz.dev>**
 
-Built in 2015-2016 by Arnaud Bérenger in the [ManyCore research group](https://www.scss.tcd.ie/ManyCore/) of
+Built in 2015-2016 by Bérenger Arnaud in the [ManyCore research group](https://www.scss.tcd.ie/ManyCore/) of
 Trinity College Dublin, as part of research conducted at Lero, the Irish Software Engineering Research Centre,
 funded by Science Foundation Ireland. The profiles were collected with
 [Harvester](https://github.com/manycore/harvester) by Roman Atachiants, on benchmarks such as
