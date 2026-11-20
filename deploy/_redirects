@@ -1,0 +1,5 @@
+# Cloudflare Workers static assets (copied to dist/ by scripts/build.js). html_handling is "none" (see
+# wrangler.jsonc), so the two entry pages are mapped explicitly.
+/      /index.html     200
+/xp    /xp/            301
+/xp/   /xp/index.html  200

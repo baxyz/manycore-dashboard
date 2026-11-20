@@ -1,0 +1,17 @@
+{
+  "$schema": "node_modules/wrangler/config-schema.json",
+  // manycore.baxyz.dev: the static demo, built by Workers Builds with `npm run build` (see README.md).
+  "name": "manycore-dashboard",
+  "compatibility_date": "2026-11-20",
+  "assets": {
+    "directory": "./dist",
+    // Serve /xp/page/common/task.html as is: the AngularJS templates are fetched with their .html extension
+    "html_handling": "none",
+    "not_found_handling": "none"
+  },
+  "workers_dev": true,
+  "preview_urls": true,
+  // Required by `wrangler preview` (branch previews from Workers Builds). Empty: previews use the top-level settings.
+  "previews": {},
+  "routes": [{ "pattern": "manycore.baxyz.dev", "custom_domain": true }]
+}
