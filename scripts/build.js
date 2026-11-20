@@ -5,8 +5,8 @@
  *   dist/libs/       <- public_libs_static/ + public_libs/ (see scripts/vendor.js)
  *   dist/data/       <- every answer of the Node server, gzipped (see public/static-service.js)
  *
- * The answers are produced by the original server code (app.js, routes/), started in this process on a free
- * port: the static demo shows exactly what the server computed. On a cold checkout the server first builds its
+ * The answers are produced by the original server code (app.js, routes/), started by scripts/serve.js in a child
+ * process on a free port: the static demo shows exactly what the server computed. On a cold checkout the server first builds its
  * caches (data/*.cache.json) from the raw traces, which takes a few minutes.
  *
  * Options:
@@ -16,6 +16,9 @@
 const fs = require('fs');
 const path = require('path');
 const zlib = require('zlib');
+const http = require('http');
+const { fork } = require('child_process');
+const gzip = require('util').promisify(zlib.gzip);
 
 const root = path.join(__dirname, '..');
 const dist = path.join(root, 'dist');
@@ -72,13 +75,21 @@ function enableStaticMode(file) {
  * Ask the original server for every answer the front end can request, one profile at a time.
  */
 async function exportData() {
-	process.chdir(root); // routes/common/profiles.common.js reads data/ relative to the working directory
-	process.env.NODE_ENV = 'production';
-	const app = require('../app');
-	const server = await new Promise((resolve) => {
-		const s = app.listen(0, '127.0.0.1', () => resolve(s));
-	});
-	const origin = `http://127.0.0.1:${server.address().port}`;
+	let server = await startServer();
+	// One connection per request (no keep-alive to race with), retried on network errors: a request lost on the
+	// Cloudflare builders (ECONNRESET) failed the whole deployment
+	async function get(service) {
+		for (let attempt = 1; ; attempt++) {
+			try {
+				return await request(server.port, `/service/${service}`);
+			} catch (error) {
+				if (attempt >= 3) throw error;
+				console.log(`build: ${service}: ${error.code || error.message}, attempt ${attempt + 1}`);
+				await new Promise((resolve) => setTimeout(resolve, 1000));
+				if (!server.alive) server = await startServer();
+			}
+		}
+	}
 
 	const target = path.join(dist, 'data');
 	fs.rmSync(target, { recursive: true, force: true });
@@ -86,15 +97,14 @@ async function exportData() {
 	let files = 0, raw = 0, packed = 0;
 	const missing = [];
 	async function save(service, file) {
-		const response = await fetch(`${origin}/service/${service}`);
-		if (response.status !== 200) {
+		const { status, body } = await get(service);
+		if (status !== 200) {
 			// The server has no data for this view of this profile; the front end gets a 500 as before
-			missing.push(`${service} (${response.status})`);
+			missing.push(`${service} (${status})`);
 			return;
 		}
-		const body = Buffer.from(await response.arrayBuffer());
 		JSON.parse(body); // an "Illegal identifier" answer would be text with a 200 status
-		const gz = zlib.gzipSync(body, { level: 9 });
+		const gz = await gzip(body, { level: 9 });
 		const out = path.join(target, file + '.gz');
 		fs.mkdirSync(path.dirname(out), { recursive: true });
 		fs.writeFileSync(out, gz);
@@ -111,7 +121,7 @@ async function exportData() {
 		// has just computed, then every later request from the cache file, where JSON turned NaN into null: the
 		// answers differ (null counts as 0). Export what a running server answered, i.e. the cached state.
 		for (const profile of profiles) {
-			await fetch(`${origin}/service/dash/${profile.id}`).then((response) => response.arrayBuffer());
+			await get(`dash/${profile.id}`);
 		}
 		console.log('build: caches ready');
 
@@ -124,12 +134,43 @@ async function exportData() {
 			console.log(`build: [${index + 1}/${profiles.length}] profile ${id} ${profile.disabled ? '(disabled) ' : ''}in ${Date.now() - started} ms`);
 		}
 	} finally {
-		server.close();
+		server.child.kill();
 	}
 
 	const mb = (n) => (n / 1024 / 1024).toFixed(1) + ' MB';
 	console.log(`build: ${files} answers, ${mb(raw)} of JSON, ${mb(packed)} gzipped`);
 	if (missing.length) console.log(`build: ${missing.length} answers not available: ${missing.join(', ')}`);
+}
+
+/**
+ * Start scripts/serve.js and wait for its port.
+ */
+function startServer() {
+	return new Promise((resolve, reject) => {
+		const child = fork(path.join(__dirname, 'serve.js'), { stdio: 'inherit' });
+		const server = { child, port: 0, alive: true };
+		child.once('message', ({ port }) => resolve(Object.assign(server, { port })));
+		child.once('error', reject);
+		child.once('exit', (code, signal) => {
+			server.alive = false;
+			reject(new Error(`the server stopped (${signal || code})`)); // ignored once started
+		});
+	});
+}
+
+/**
+ * GET on the local server, on a connection of its own.
+ */
+function request(port, pathname) {
+	return new Promise((resolve, reject) => {
+		const req = http.get({ host: '127.0.0.1', port, path: pathname, agent: false }, (response) => {
+			const chunks = [];
+			response.on('data', (chunk) => chunks.push(chunk));
+			response.on('end', () => resolve({ status: response.statusCode, body: Buffer.concat(chunks) }));
+			response.on('error', reject);
+		});
+		req.on('error', reject);
+	});
 }
 
 function checkSizes(dir) {
