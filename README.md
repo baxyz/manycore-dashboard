@@ -17,13 +17,15 @@ run the demo. The original repository is left untouched.
 
 ## What is in the demo
 
-- `/` — the dashboard: pick one or two profiles, read the gauges, then drill down into a category
-- `/xp/` — the online user study run with the dashboard in 2016 (consent, training, tasks, questionnaire). The study
-  is closed: the pages still work, but nothing is recorded.
+The dashboard: pick one or two profiles, read the gauges, then drill down into a category.
+
+The online user study run with the dashboard in 2016 (`public_xp/`: consent, training, tasks, questionnaire) is
+closed: the demo does not publish it and the welcome page shows its entries disabled. It still runs with
+`npm start`.
 
 ## How the static demo works
 
-The dashboard was an AngularJS 1.5 front end (`public/`, `public_xp/`) talking to an Express server (`app.js`,
+The dashboard was an AngularJS 1.5 front end (`public/`) talking to an Express server (`app.js`,
 `routes/`) that computed every answer from about 1 GB of raw traces (`data/`). Those answers only depend on the
 profile ids, so the demo is static:
 
@@ -43,6 +45,7 @@ Bootstrap 3.3.7 with the Yeti theme…): bower asked for "latest", which no long
 Changes to the original front end are limited to:
 
 - loading `static-service.js` (inactive unless the page sets `window.MANYCORE_STATIC`, which only the build does);
+- the welcome page shows the user study entries disabled in the static demo;
 - the drawing of lock dependencies (`public/details/widgets/widgets.directive.js`): the profile "Program B" (221)
   holds over a million lock events, and drawing one SVG element per event froze the browser, with the original
   server too. Marks piling up on the same spot are now drawn a few times only and contiguous holding periods are

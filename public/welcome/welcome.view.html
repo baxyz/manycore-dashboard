@@ -22,9 +22,15 @@
 					<i class="fa fa-flask fa-stack-1x fa-inverse"></i>
 				</span>
 				<h2>Experiments</h2>
-				<p>If you're here for an experimentation, first, thanks a million.</p>
-				<p>Then, choose the experiment you want to try:</p>
-				<a ng-repeat="xp in experiments" type="button" href='{{::xp.url}}' class="btn btn-info btn-block">{{::xp.label}}</a>
+				<div ng-if="! experimentsClosed">
+					<p>If you're here for an experimentation, first, thanks a million.</p>
+					<p>Then, choose the experiment you want to try:</p>
+					<a ng-repeat="xp in experiments" type="button" href='{{::xp.url}}' class="btn btn-info btn-block">{{::xp.label}}</a>
+				</div>
+				<div ng-if="experimentsClosed">
+					<p>The user study run with this prototype at Trinity College Dublin in 2016 is now closed.</p>
+					<button ng-repeat="xp in experiments" type="button" class="btn btn-info btn-block" disabled>{{::xp.label}}</button>
+				</div>
 			</div>
 		</div>
 		<div class="col-md-6">

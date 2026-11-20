@@ -56,6 +56,8 @@ app.controller('WelcomeController', ['$scope', function($scope) {
 		{ label: 'Experimentation 1', url: '/xp/#/xp/1' },
 		{ label: 'Experimentation 90', url: '/xp/#/xp/90' }
 	]
+	// The static demo does not publish the user study (/xp/), which ran in 2016
+	$scope.experimentsClosed = !! window.MANYCORE_STATIC;
 	
 	
 	
