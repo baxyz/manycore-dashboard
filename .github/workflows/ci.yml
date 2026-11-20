@@ -1,0 +1,47 @@
+name: CI
+
+# Builds the static demo on every pull request and push to main. Deployment is done by Cloudflare Workers Builds.
+
+on:
+  push:
+    branches: [main]
+  pull_request:
+
+permissions:
+  contents: read
+
+concurrency:
+  group: ci-${{ github.ref }}
+  cancel-in-progress: true
+
+jobs:
+  build:
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+
+      - uses: actions/setup-node@v4
+        with:
+          node-version: 26
+
+      - name: Install dependencies
+        run: npm ci
+
+      # Starts the original server, exports every answer to dist/data/ and fails on a file over 25 MiB
+      - name: Build
+        run: npm run build
+
+  # Commit messages must follow Conventional Commits with the scopes listed in scopes.json.
+  commits:
+    if: github.event_name == 'pull_request'
+    runs-on: ubuntu-latest
+    steps:
+      # In a pull request the checkout is a merge commit, whose "Merge <sha> into <sha>" subject is not a
+      # conventional commit: validate the commits of the branch itself.
+      # helpers4/action has no release tag yet (the documented @v1 does not exist): pinned to a commit of main.
+      - uses: helpers4/action/conventional-commits@87577a7d709eee25736487aacd0353244bac740c
+        with:
+          base-sha: ${{ github.event.pull_request.base.sha }}
+          head-sha: ${{ github.event.pull_request.head.sha }}
+          ignore-commits: ^Merge
+          pr-comment: none
