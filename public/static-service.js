@@ -11,8 +11,7 @@
  *   GET  /service/dash/<id>                  -> data/dash/<id>.json.gz
  *   GET  /service/raw/<ids>                  -> data/raw/<id>.json.gz, one per id, merged
  *   GET  /service/details/<cat>/<ids>        -> data/details/<cat>/<id>.json.gz, one per id, merged
- *   POST /service/collect                    -> accepted and dropped (the user study is over)
- *   anything else under /service/            -> 404 (the admin pages need the server)
+ *   anything else under /service/            -> 404 (the admin pages and the user study need the server)
  *
  * The files are gzipped by the build (the largest answer is 36 MB of JSON, 1.3 MB gzipped, while Cloudflare
  * serves 25 MiB at most per file) and inflated here with DecompressionStream.
@@ -45,11 +44,7 @@
 				}
 
 				$q.when(answer).then(function (data) {
-					if (data instanceof Text) {
-						callback(200, data.value, 'Content-Type: text/plain', 'OK');
-					} else {
-						callback(200, data, 'Content-Type: application/json', 'OK');
-					}
+					callback(200, data, 'Content-Type: application/json', 'OK');
 				}, function (error) {
 					var status = (error && error.status) || 500;
 					if (status >= 500) console.error('[static]', method, url, error);
@@ -61,9 +56,6 @@
 			function route(method, parts) {
 				var service = parts[0];
 
-				if (method === 'POST' && service === 'collect') {
-					return text('The static demo does not record experiment data.');
-				}
 				if (method !== 'GET') throw httpError(405, 'Method not allowed');
 
 				switch (service) {
@@ -124,10 +116,6 @@
 				if (!id || !/^[0-9]+$/.test(id)) throw httpError(400, 'Illegal identifier');
 				return id;
 			}
-
-			// A plain-text answer (routes/collect.js answers with a sentence)
-			function Text(value) { this.value = value; }
-			function text(value) { return new Text(value); }
 
 			function httpError(status, message) {
 				var error = new Error(message);

@@ -3,7 +3,6 @@
  *
  *   dist/            <- public/            (the dashboard)
  *   dist/libs/       <- public_libs_static/ + public_libs/ (see scripts/vendor.js)
- *   dist/xp/         <- public_xp/         (the user-study platform)
  *   dist/data/       <- every answer of the Node server, gzipped (see public/static-service.js)
  *
  * The answers are produced by the original server code (app.js, routes/), started in this process on a free
@@ -22,12 +21,11 @@ const root = path.join(__dirname, '..');
 const dist = path.join(root, 'dist');
 const skipData = process.argv.includes('--skip-data');
 
-// Same mounts as app.js
+// Same mounts as app.js, except public_xp/ (/xp/): the user study ran in 2016 and is closed
 const mounts = [
 	['public', ''],
 	['public_libs_static', 'libs'],
 	['public_libs', 'libs'],
-	['public_xp', 'xp'],
 ];
 
 // Categories of /service/details (routes/details.js)
@@ -49,8 +47,7 @@ async function main() {
 	}
 	// The admin pages need the live server (cache reload, study results)
 	fs.rmSync(path.join(dist, 'admin'), { recursive: true, force: true });
-	for (const page of ['index.html', 'xp/index.html']) enableStaticMode(path.join(dist, page));
-	addStudyNotice(path.join(dist, 'xp/index.html'));
+	enableStaticMode(path.join(dist, 'index.html'));
 	for (const file of ['_headers', '_redirects']) fs.copyFileSync(path.join(root, 'deploy', file), path.join(dist, file));
 	console.log('build: pages copied');
 
@@ -68,20 +65,6 @@ function enableStaticMode(file) {
 	if (!html.includes(script)) throw new Error(`${file}: static-service.js is not loaded`);
 	html = html.replace(script, '\t<script>window.MANYCORE_STATIC = { base: \'/data/\' };</script>\n' + script);
 	html = html.replace(/\t<script src="\/admin\/admin\.controller\.js"[^>]*><\/script>\n/, '');
-	fs.writeFileSync(file, html);
-}
-
-/**
- * The user study ran in 2016: say so on its pages, which still invite people to take part.
- */
-function addStudyNotice(file) {
-	let html = fs.readFileSync(file, 'utf8');
-	const notice = '<div style="position:fixed;bottom:0;left:0;right:0;z-index:2000;background:#fcf8e3;color:#8a6d3b;'
-		+ 'border-top:1px solid #faebcc;padding:6px 15px;'
-		+ 'text-align:center;font-size:13px">Archived demo: this user study ran at Trinity College Dublin in 2016 '
-		+ 'and is closed. You can go through it, but no answer is recorded.</div>';
-	if (!/<body[^>]*>/.test(html)) throw new Error(`${file}: no <body>`);
-	html = html.replace(/<body[^>]*>/, (body) => body + '\n' + notice);
 	fs.writeFileSync(file, html);
 }
 
