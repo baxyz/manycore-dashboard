@@ -1,0 +1,9 @@
+# Cloudflare Workers static assets: response headers (copied to dist/ by scripts/build.js)
+
+# Pre-computed server answers: gzipped JSON, inflated by public/static-service.js
+/data/*
+  Content-Type: application/gzip
+  Cache-Control: public, max-age=86400
+
+/libs/*
+  Cache-Control: public, max-age=604800
