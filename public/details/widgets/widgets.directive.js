@@ -1726,8 +1726,35 @@ app.directive('chartLines', function() {
 				directive_repaint_VCustomAxis(r, index, r.deck.h, r.meta.lines[index]);
 				
 				// Draw dependencies
+				//	A profile can hold a million lock events (profile 221): drawing one SVG element per event, and
+				//	looking the insertion point up for each of them, froze the browser. The events are walked as
+				//	before, but the marks piling up on the same spot are drawn a few times only and the contiguous
+				//	holding periods of a thread are merged: the picture is nearly the same, with far fewer elements.
 				if (r.deck.depends) {
 					var depData = profileData.dependencies[r.deck.depends.list];
+					// Marks closer than a quarter of a pixel overlap: drawing one more than OVERDRAW of them no longer
+					// changes the antialiased picture
+					var OVERDRAW = 8;
+					var bucket = function(x) { return Math.round(x * 4); };
+					var marks = {}, threadIds = [];
+					var thread = function(h) {
+						if (! marks.hasOwnProperty(h)) {
+							marks[h] = { links: [], periods: [], glyphs: [], seen: {} };
+							threadIds.push(h);
+						}
+						return marks[h];
+					};
+					var addGlyph = function(h, x, glyph, size, colour, lockClass) {
+						var m = thread(h), key = glyph + bucket(x) + (lockClass || '');
+						if (m.seen[key] >= OVERDRAW) return;
+						m.seen[key] = (m.seen[key] || 0) + 1;
+						m.glyphs.push({ x: x, glyph: glyph, size: size, colour: colour, lockClass: lockClass });
+					};
+					var addPeriod = function(h, x1, x2) {
+						var list = thread(h).periods, last = list[list.length - 1];
+						if (last && x1 <= last.x2 + 0.25) last.x2 = Math.max(last.x2, x2);
+						else list.push({ x1: x1, x2: x2 });
+					};
 					
 					for (var lock in depData) {
 						var holded, start;
@@ -1736,41 +1763,20 @@ app.directive('chartLines', function() {
 							if (event.x == 'lf') {
 								// Draw the dependency line
 								if (r.meta.holdingMode >= 1 && event.hl) {
-									elementClasses = (r.meta.holdingMode == 1) ? 'svg-data svg-data-line svg-group-hovered-element' : 'svg-data svg-data-line';
-									mapLines[event.h].g.insert('line', ':first-child')
-										.attr('class', elementClasses)
-										.attr('x1', r.scaleX(event.t)).attr('x2', r.scaleX(event.t))
-										.attr('y1', lineCenter).attr('y2', lineCenter + mapLines[event.hl].y - mapLines[event.h].y)
-										.attr('stroke', r.deck.depends.failure.colours.n)
-										.attr('stroke-width', 1)
-										.attr('stroke-dasharray', '2,2');
+									var m = thread(event.h), x = r.scaleX(event.t), key = 'hl' + bucket(x) + '-' + event.hl;
+									if (! (m.seen[key] >= OVERDRAW)) {
+										m.seen[key] = (m.seen[key] || 0) + 1;
+										m.links.push({ x: x, dy: mapLines[event.hl].y - mapLines[event.h].y });
+									}
 								}
 								// Cross
-								mapLines[event.h].g.append('text')
-									.attr('class', 'svg-data svg-data-failure svg-data-failure-label')
-									.attr('x', r.scaleX(event.t))
-									.attr('y', lineCenter)
-									.attr('text-anchor', 'middle')
-									.attr('alignment-baseline', 'central')
-									.attr('dominant-baseline', 'central')
-									.attr('font-size', '14px')
-									.attr('fill', r.deck.depends.failure.colours.n)
-									.text('×'); // ╳
+								addGlyph(event.h, r.scaleX(event.t), '×', '14px', r.deck.depends.failure.colours.n); // ╳
 							}
 							
 							// Success
 							else if (event.x == 'ls') {
 								// Tick
-								mapLines[event.h].g.append('text')
-									.attr('class', 'svg-data svg-data-failure svg-data-failure-label svg-data-lock-ls-' + lock)
-									.attr('x', r.scaleX(event.t))
-									.attr('y', lineCenter)
-									.attr('text-anchor', 'middle')
-									.attr('alignment-baseline', 'central')
-									.attr('dominant-baseline', 'central')
-									.attr('font-size', '12px')
-									.attr('fill', r.deck.depends.working.colours.f)
-									.text('[');
+								addGlyph(event.h, r.scaleX(event.t), '[', '12px', r.deck.depends.working.colours.f, 'svg-data-lock-ls-' + lock);
 								holded = event;
 							}
 							
@@ -1781,26 +1787,10 @@ app.directive('chartLines', function() {
 
 									// Period
 									//	-> only if more than zero
-									if (event.t - start > 0) {
-										mapLines[holded.h].g.insert('line', '.svg-data-lock-ls-' + lock)
-											.attr('class', "svg-data svg-data-line")
-											.attr('x1', r.scaleX(start)).attr('x2', r.scaleX(event.t))
-											.attr('y1', lineCenter).attr('y2', lineCenter)
-											.attr('stroke', r.deck.depends.working.colours.n)
-											.attr('stroke-width', 5);
-									}
+									if (event.t - start > 0) addPeriod(holded.h, r.scaleX(start), r.scaleX(event.t));
 									
 									// Tick
-									mapLines[holded.h].g.append('text')
-										.attr('class', 'svg-data svg-data-failure svg-data-failure-label')
-										.attr('x', r.scaleX(event.t))
-										.attr('y', lineCenter)
-										.attr('text-anchor', 'middle')
-										.attr('alignment-baseline', 'central')
-										.attr('dominant-baseline', 'central')
-										.attr('font-size', '12px')
-										.attr('fill', r.deck.depends.working.colours.f)
-										.text(']');
+									addGlyph(holded.h, r.scaleX(event.t), ']', '12px', r.deck.depends.working.colours.f);
 									
 									holded = null;
 								} else {
@@ -1809,18 +1799,45 @@ app.directive('chartLines', function() {
 							}
 						}, this);
 						
-						if (holded) {
-							// Line
-							if (mapLines[holded.h].e - holded.t > 0)
-								mapLines[holded.h].g.append('line')
-									.attr('class', "svg-data svg-data-line")
-									.attr('x1', r.scaleX(holded.t)).attr('x2', r.scaleX(mapLines[holded.h].e))
-									.attr('y1', lineCenter).attr('y2', lineCenter)
-									.attr('stroke', r.deck.depends.working.colours.n)
-									.attr('stroke-width', 5);
-							
-						}
+						// Line
+						if (holded && mapLines[holded.h].e - holded.t > 0)
+							addPeriod(holded.h, r.scaleX(holded.t), r.scaleX(mapLines[holded.h].e));
 					}
+					
+					// Dependency lines under everything, then the holding periods, then the marks
+					elementClasses = (r.meta.holdingMode == 1) ? 'svg-data svg-data-line svg-group-hovered-element' : 'svg-data svg-data-line';
+					threadIds.forEach(function(h) {
+						var g = mapLines[h].g;
+						marks[h].links.forEach(function(link) {
+							g.insert('line', ':first-child')
+								.attr('class', elementClasses)
+								.attr('x1', link.x).attr('x2', link.x)
+								.attr('y1', lineCenter).attr('y2', lineCenter + link.dy)
+								.attr('stroke', r.deck.depends.failure.colours.n)
+								.attr('stroke-width', 1)
+								.attr('stroke-dasharray', '2,2');
+						});
+						marks[h].periods.forEach(function(period) {
+							g.append('line')
+								.attr('class', "svg-data svg-data-line")
+								.attr('x1', period.x1).attr('x2', period.x2)
+								.attr('y1', lineCenter).attr('y2', lineCenter)
+								.attr('stroke', r.deck.depends.working.colours.n)
+								.attr('stroke-width', 5);
+						});
+						marks[h].glyphs.forEach(function(mark) {
+							g.append('text')
+								.attr('class', 'svg-data svg-data-failure svg-data-failure-label' + (mark.lockClass ? ' ' + mark.lockClass : ''))
+								.attr('x', mark.x)
+								.attr('y', lineCenter)
+								.attr('text-anchor', 'middle')
+								.attr('alignment-baseline', 'central')
+								.attr('dominant-baseline', 'central')
+								.attr('font-size', mark.size)
+								.attr('fill', mark.colour)
+								.text(mark.glyph);
+						});
+					});
 				}
 			});
 
