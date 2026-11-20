@@ -13,7 +13,8 @@ app.set('view engine', 'ejs');
 
 // Express
 app.use(favicon(__dirname + '/public/assets/favicon.ico'));
-app.use(logger('dev'));
+// No request log when scripts/build.js exports every answer
+if (process.env.NODE_ENV !== 'production') app.use(logger('dev'));
 //app.use(cookieParser());
 app.use(express.static(path.join(__dirname, 'public')));
 
